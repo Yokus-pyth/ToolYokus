@@ -1,2 +1,6 @@
+
+## 📝 Шаг 3: Создайте файл requirements.txt
+
+```txt
 pywin32
 psutil

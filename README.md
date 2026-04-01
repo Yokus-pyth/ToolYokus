@@ -20,8 +20,6 @@
 
 \- Очистка Prefetch
 
-\- Очистка DNS кэша
-
 \- Очистка RAM
 
 \- Очистка корзины
@@ -43,4 +41,26 @@
 \### ⚡ MUST HAVE
 
 Автоматическая установка базового набора программ одним кликом.
+
+
+
+\## Установка
+
+
+
+\### Для пользователей (EXE)
+
+1\. Скачайте последнюю версию из \[Releases](https://github.com/Yokus-pyth/ToolYokus/releases)
+
+2\. Запустите `ToolByYokus.exe` от имени администратора
+
+
+
+\### Для разработчиков
+
+```bash
+
+pip install -r requirements.txt
+
+python tool\_by\_yokus.py
 

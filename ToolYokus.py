@@ -25,13 +25,39 @@ class ToolByYokus:
         
         # Версия программы
         self.version = "1.0.0"
-        self.github_repo = "Yokus-pyth/Windows-tool-after-reinstall-OS"
+        self.github_repo = "Yokus-pyth/ToolYokus"
         
         # Флаг запуска от администратора
         self.is_admin = False
         
         # Определяем разрядность системы
         self.is_64bit = self.is_windows_64bit()
+        
+        # Получаем путь к папке программы
+        if getattr(sys, 'frozen', False):
+            self.program_path = os.path.dirname(sys.executable)
+        else:
+            self.program_path = os.path.dirname(os.path.abspath(__file__))
+        
+        # Папка для логов (рядом с программой)
+        self.logs_folder = os.path.join(self.program_path, "Logs")
+        if not os.path.exists(self.logs_folder):
+            try:
+                os.makedirs(self.logs_folder)
+            except:
+                self.logs_folder = os.path.join(tempfile.gettempdir(), "ToolByYokus_Logs")
+                if not os.path.exists(self.logs_folder):
+                    os.makedirs(self.logs_folder)
+        
+        # Папка для временных установщиков (рядом с программой)
+        self.installers_folder = os.path.join(self.program_path, "Installers")
+        if not os.path.exists(self.installers_folder):
+            try:
+                os.makedirs(self.installers_folder)
+            except:
+                self.installers_folder = os.path.join(tempfile.gettempdir(), "ToolByYokus_Installers")
+                if not os.path.exists(self.installers_folder):
+                    os.makedirs(self.installers_folder)
         
         # Переменные для темы
         self.dark_theme = False
@@ -44,12 +70,6 @@ class ToolByYokus:
         self.dx_cache_path = f"C:\\Users\\{username}\\AppData\\Local\\NVIDIA\\DXCache"
         self.opengl_cache_path = f"C:\\Users\\{username}\\AppData\\Local\\NVIDIA\\GLCache"
         self.prefetch_path = "C:\\Windows\\Prefetch"
-        self.dns_cache = "dns"
-        
-        # Папка для логов
-        self.logs_folder = os.path.join(os.path.dirname(os.path.abspath(__file__)), "YokusLogs")
-        if not os.path.exists(self.logs_folder):
-            os.makedirs(self.logs_folder)
         
         # Словарь для хранения размеров папок
         self.sizes = {
@@ -58,7 +78,6 @@ class ToolByYokus:
             'opengl': 0, 
             'recycle': 0,
             'prefetch': 0,
-            'dns': 0,
             'ram': 0
         }
         
@@ -68,7 +87,6 @@ class ToolByYokus:
         self.opengl_var = tk.BooleanVar()
         self.recycle_var = tk.BooleanVar()
         self.prefetch_var = tk.BooleanVar()
-        self.dns_var = tk.BooleanVar()
         self.ram_var = tk.BooleanVar()
         
         # Переменные для чекбоксов установки софта
@@ -81,7 +99,6 @@ class ToolByYokus:
             'opengl': {'files': 0, 'size': 0, 'failed': []},
             'recycle': {'files': 0, 'size': 0, 'failed': []},
             'prefetch': {'files': 0, 'size': 0, 'failed': []},
-            'dns': {'files': 0, 'size': 0, 'failed': []},
             'ram': {'files': 0, 'size': 0, 'failed': []}
         }
         
@@ -89,8 +106,28 @@ class ToolByYokus:
         self.setup_ui()
         self.apply_theme()
         
-        # Проверка прав администратора после создания UI
+        # Привязываем колесо мыши
+        self.bind_mousewheel()
+        
+        # Проверка прав администратора
         self.root.after(100, self.check_admin_rights)
+        
+        # Логируем пути
+        self.log(f"📁 Папка программы: {self.program_path}")
+        self.log(f"📁 Папка логов: {self.logs_folder}")
+        self.log(f"📁 Папка установщиков: {self.installers_folder}")
+    
+    def bind_mousewheel(self):
+        """Привязка колеса мыши для прокрутки"""
+        def on_mousewheel(event):
+            # Прокрутка лога
+            if hasattr(self, 'log_text') and self.log_text.winfo_exists():
+                self.log_text.yview_scroll(int(-1*(event.delta/120)), "units")
+            # Прокрутка Canvas на вкладке Софт
+            if hasattr(self, 'soft_canvas') and self.soft_canvas.winfo_exists():
+                self.soft_canvas.yview_scroll(int(-1*(event.delta/120)), "units")
+        
+        self.root.bind_all("<MouseWheel>", on_mousewheel)
     
     def is_windows_64bit(self):
         """Определяет разрядность Windows"""
@@ -100,34 +137,34 @@ class ToolByYokus:
             return platform.machine().endswith('64')
     
     def check_admin_rights(self):
-        """Проверка прав администратора без перезапуска"""
+        """Проверка прав администратора с автоматическим перезапуском"""
         try:
             self.is_admin = ctypes.windll.shell32.IsUserAnAdmin()
             if not self.is_admin:
                 result = messagebox.askyesno(
                     "Права администратора",
-                    "Для корректной работы некоторых функций (очистка Prefetch, DNS и др.) требуются права администратора.\n\n"
-                    "Хотите перезапустить программу с правами администратора?\n\n"
-                    "Если выберете 'Нет', некоторые функции могут работать некорректно."
+                    "Для корректной работы некоторых функций (очистка Prefetch и др.) требуются права администратора.\n\n"
+                    "Разрешить программе автоматически перезапуститься с правами администратора?\n\n"
+                    "(Программа закроется и откроется заново)"
                 )
                 if result:
-                    # Перезапускаем с правами администратора
+                    # Перезапускаем с правами и завершаем текущий процесс
                     ctypes.windll.shell32.ShellExecuteW(
                         None, "runas", sys.executable, " ".join(sys.argv), None, 1
                     )
                     self.root.quit()
+                    sys.exit(0)
                 else:
                     messagebox.showwarning(
                         "Внимание",
                         "Программа запущена без прав администратора.\n\n"
-                        "Функции очистки Prefetch, DNS кэша и некоторые другие могут не работать.\n\n"
-                        "Рекомендуется перезапустить программу от имени администратора."
+                        "Функции очистки Prefetch и некоторые другие могут не работать."
                     )
-                    self.log("⚠️ Программа запущена без прав администратора. Некоторые функции могут быть недоступны.")
+                    self.log("⚠️ Программа запущена без прав администратора.")
             else:
                 self.log("✅ Программа запущена с правами администратора.")
-        except:
-            self.log("⚠️ Не удалось проверить права администратора.")
+        except Exception as e:
+            self.log(f"⚠️ Не удалось проверить права администратора: {e}")
     
     def setup_ui(self):
         """Настройка интерфейса"""
@@ -238,6 +275,23 @@ class ToolByYokus:
             cursor="hand2"
         )
         self.pin_btn.pack(side=tk.LEFT, padx=5)
+        
+        # Кнопка открытия папки с логами
+        logs_btn = tk.Button(
+            bottom_frame,
+            text="📁 Открыть логи",
+            command=self.open_logs_folder,
+            font=("Arial", 9),
+            cursor="hand2"
+        )
+        logs_btn.pack(side=tk.RIGHT, padx=5)
+    
+    def open_logs_folder(self):
+        """Открывает папку с логами"""
+        if os.path.exists(self.logs_folder):
+            os.startfile(self.logs_folder)
+        else:
+            messagebox.showwarning("Ошибка", f"Папка с логами не найдена:\n{self.logs_folder}")
     
     def create_tooltip(self, widget, text):
         """Создание подсказки при наведении"""
@@ -296,9 +350,6 @@ class ToolByYokus:
         add_checkbox(checkbox_frame, "Очистить Prefetch", self.prefetch_var,
                     "Удаляет данные о запущенных программах. Windows восстановит их при следующем запуске.")
         
-        add_checkbox(checkbox_frame, "Очистить DNS кэш", self.dns_var,
-                    "Сбрасывает DNS кэш. Помогает при проблемах с интернет-соединением.")
-        
         add_checkbox(checkbox_frame, "Очистить RAM (оперативную память)", self.ram_var,
                     "Освобождает неиспользуемую оперативную память. Может ускорить работу системы.")
         
@@ -329,13 +380,11 @@ class ToolByYokus:
         log_label = tk.Label(main_frame, text="Лог операций:", font=("Arial", 10, "bold"))
         log_label.pack(anchor='w')
         
-        # Увеличиваем высоту лога
         self.log_text = scrolledtext.ScrolledText(main_frame, height=18, width=80, font=("Consolas", 9))
         self.log_text.pack(fill=tk.BOTH, expand=True, pady=(5, 0))
     
     def setup_soft_tab(self):
         """Вкладка Софт с выпадающими категориями"""
-        # Canvas для прокрутки
         self.soft_canvas = tk.Canvas(self.tab_soft)
         scrollbar = ttk.Scrollbar(self.tab_soft, orient="vertical", command=self.soft_canvas.yview)
         scrollable_frame = tk.Frame(self.soft_canvas)
@@ -347,7 +396,6 @@ class ToolByYokus:
         self.soft_canvas.pack(side="left", fill="both", expand=True)
         scrollbar.pack(side="right", fill="y")
         
-        # Заголовок
         title_label = tk.Label(scrollable_frame, text="Tool by Yokus", font=("Arial", 24, "bold"), fg="#9b59b6")
         title_label.grid(row=0, column=0, columnspan=2, pady=(10, 5))
         
@@ -358,7 +406,6 @@ class ToolByYokus:
         arch_label = tk.Label(scrollable_frame, text=f"🔧 Обнаружена: {arch_text}", font=("Arial", 10, "bold"), fg="#4CAF50")
         arch_label.grid(row=2, column=0, columnspan=2, pady=(0, 15))
         
-        # Кнопки установки
         btn_frame = tk.Frame(scrollable_frame)
         btn_frame.grid(row=3, column=0, columnspan=2, pady=(0, 20))
         
@@ -401,7 +448,6 @@ class ToolByYokus:
         )
         nvidia_btn.pack(side=tk.LEFT, padx=5)
         
-        # Категории и программы
         categories = {
             "🌐 Браузеры": [
                 ("Google Chrome", "https://www.google.com/chrome/?standalone=1&platform=win" + ("64" if self.is_64bit else ""), "/silent /install"),
@@ -529,7 +575,7 @@ class ToolByYokus:
         self.pin_btn.config(text="📍 Закреплено" if self.pinned else "📌 Закрепить")
     
     def load_settings(self):
-        settings_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), "settings.json")
+        settings_file = os.path.join(self.program_path, "settings.json")
         try:
             if os.path.exists(settings_file):
                 with open(settings_file, 'r', encoding='utf-8') as f:
@@ -539,20 +585,18 @@ class ToolByYokus:
                     self.opengl_var.set(settings.get('opengl', False))
                     self.recycle_var.set(settings.get('recycle', False))
                     self.prefetch_var.set(settings.get('prefetch', False))
-                    self.dns_var.set(settings.get('dns', False))
                     self.ram_var.set(settings.get('ram', False))
         except:
             pass
     
     def save_settings(self):
-        settings_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), "settings.json")
+        settings_file = os.path.join(self.program_path, "settings.json")
         settings = {
             'temp': self.temp_var.get(),
             'dx': self.dx_var.get(),
             'opengl': self.opengl_var.get(),
             'recycle': self.recycle_var.get(),
             'prefetch': self.prefetch_var.get(),
-            'dns': self.dns_var.get(),
             'ram': self.ram_var.get()
         }
         try:
@@ -562,28 +606,68 @@ class ToolByYokus:
             pass
     
     def check_for_updates(self):
-        """Проверка обновлений"""
+        """Проверка обновлений на GitHub с fallback-методом"""
         self.log("🔄 Проверка обновлений...")
         
         def check_thread():
             try:
-                url = f"https://api.github.com/repos/{self.github_repo}/releases/latest"
-                req = urllib.request.Request(url, headers={'User-Agent': 'ToolByYokus'})
-                response = urllib.request.urlopen(req, timeout=10)
-                data = json.loads(response.read().decode())
+                # Пробуем получить последний релиз
+                url_latest = f"https://api.github.com/repos/{self.github_repo}/releases/latest"
+                req = urllib.request.Request(url_latest, headers={'User-Agent': 'ToolByYokus'})
                 
-                latest_version = data['tag_name'].lstrip('v')
-                download_url = data['html_url']
-                
-                if latest_version > self.version:
-                    self.root.after(0, lambda: self.prompt_update(latest_version, download_url))
-                else:
-                    self.root.after(0, lambda: messagebox.showinfo("Обновления", "У тебя актуальная версия братан, зачилься!"))
-                    self.log("✅ У тебя актуальная версия братан, зачилься!")
+                try:
+                    response = urllib.request.urlopen(req, timeout=10)
+                    data = json.loads(response.read().decode())
+                    latest_version = data['tag_name'].lstrip('v')
+                    download_url = data['html_url']
                     
+                    if latest_version > self.version:
+                        self.root.after(0, lambda: self.prompt_update(latest_version, download_url))
+                    else:
+                        self.root.after(0, lambda: messagebox.showinfo("Обновления", "У тебя актуальная версия братан, зачилься!"))
+                        self.log("✅ У тебя актуальная версия братан, зачилься!")
+                        return
+                        
+                except urllib.error.HTTPError as e:
+                    if e.code == 404:
+                        # Если /latest не работает, пробуем получить список всех релизов
+                        self.log("⏳ API GitHub еще не обновился, пробую альтернативный способ...")
+                        url_all = f"https://api.github.com/repos/{self.github_repo}/releases"
+                        req_all = urllib.request.Request(url_all, headers={'User-Agent': 'ToolByYokus'})
+                        response_all = urllib.request.urlopen(req_all, timeout=10)
+                        releases = json.loads(response_all.read().decode())
+                        
+                        if releases:
+                            # Берем первый релиз (самый новый)
+                            latest = releases[0]
+                            latest_version = latest['tag_name'].lstrip('v')
+                            download_url = latest['html_url']
+                            
+                            if latest_version > self.version:
+                                self.root.after(0, lambda: self.prompt_update(latest_version, download_url))
+                            else:
+                                self.root.after(0, lambda: messagebox.showinfo("Обновления", "У тебя актуальная версия братан, зачилься!"))
+                                self.log("✅ У тебя актуальная версия братан, зачилься!")
+                            return
+                        else:
+                            raise Exception("Релизы не найдены")
+                    else:
+                        raise e
+                        
             except Exception as e:
-                self.root.after(0, lambda: messagebox.showerror("Ошибка", f"Не удалось проверить обновления:\n{str(e)}"))
-                self.log(f"❌ Ошибка проверки обновлений: {str(e)}")
+                # Если все способы не сработали, предлагаем открыть страницу релизов вручную
+                error_msg = str(e)
+                self.log(f"⚠️ Не удалось проверить обновления: {error_msg}")
+                
+                result = messagebox.askyesno(
+                    "Проверка обновлений",
+                    f"Не удалось автоматически проверить обновления.\n\n"
+                    f"Ошибка: {error_msg}\n\n"
+                    f"Хотите открыть страницу релизов в браузере?\n\n"
+                    f"https://github.com/{self.github_repo}/releases"
+                )
+                if result:
+                    webbrowser.open(f"https://github.com/{self.github_repo}/releases")
         
         thread = threading.Thread(target=check_thread)
         thread.daemon = True
@@ -592,7 +676,7 @@ class ToolByYokus:
     def prompt_update(self, latest_version, download_url):
         result = messagebox.askyesno(
             "Доступно обновление",
-            f"Доступна новая версия {latest_version}!\n\nТекущая версия: {self.version}\n\nХотите скачать обновление?"
+            f"Доступна новая версия {latest_version}!\n\nТекущая версия: {self.version}\n\nХотите перейти на страницу загрузки?"
         )
         if result:
             webbrowser.open(download_url)
@@ -609,7 +693,6 @@ class ToolByYokus:
         self.opengl_var.set(True)
         self.recycle_var.set(True)
         self.prefetch_var.set(True)
-        self.dns_var.set(True)
         self.ram_var.set(True)
         if not hasattr(self, '_select_all_logged'):
             self.log("✓ Выбраны все пункты для очистки")
@@ -623,7 +706,6 @@ class ToolByYokus:
             "Steam", "qBittorrent", "Visual C++ Redistributable", ".NET Desktop Runtime"
         ]
         
-        # Проверяем какие программы уже выбраны
         programs_to_install = []
         for prog in must_have_list:
             if prog in self.software_vars:
@@ -634,7 +716,6 @@ class ToolByYokus:
             messagebox.showwarning("Ошибка", "Не удалось найти программы для установки!")
             return
         
-        # Показываем список программ
         result = messagebox.askyesno(
             "MUST HAVE установка",
             f"Будут установлены следующие программы:\n\n" + "\n".join(f"• {p}" for p in programs_to_install) + 
@@ -669,7 +750,7 @@ class ToolByYokus:
         return progress_window, progress_bar, status_label
     
     def install_selected_software(self):
-        """Установка выбранных программ с отдельным окном прогресса"""
+        """Установка выбранных программ с сохранением установщиков в папку программы"""
         selected = [name for name, data in self.software_vars.items() if data["var"].get()]
         
         if not selected:
@@ -679,7 +760,8 @@ class ToolByYokus:
         result = messagebox.askyesno(
             "Подтверждение установки",
             f"Будет установлено {len(selected)} программ.\n\n"
-            f"Установка будет выполнена в тихом режиме.\n\n"
+            f"Установщики будут сохранены в папку:\n{self.installers_folder}\n\n"
+            f"После установки они будут автоматически удалены.\n\n"
             f"Продолжить?"
         )
         
@@ -687,9 +769,9 @@ class ToolByYokus:
             progress_win, progress_bar, status_label = self.show_progress_window("Установка программ", len(selected))
             
             def install_thread():
-                temp_dir = tempfile.gettempdir()
                 installed = []
                 failed = []
+                downloaded_files = []
                 
                 for i, prog_name in enumerate(selected):
                     status_label.config(text=f"Установка: {prog_name}")
@@ -706,14 +788,20 @@ class ToolByYokus:
                             installed.append(prog_name)
                             continue
                         
-                        filename = os.path.join(temp_dir, f"{prog_name.replace(' ', '_')}.exe")
+                        safe_name = prog_name.replace(' ', '_').replace('.', '_')
                         if url.endswith('.msi'):
-                            filename = filename.replace('.exe', '.msi')
+                            filename = os.path.join(self.installers_folder, f"{safe_name}.msi")
+                        else:
+                            filename = os.path.join(self.installers_folder, f"{safe_name}.exe")
                         
                         status_label.config(text=f"Скачивание: {prog_name}")
+                        self.log(f"   ⬇️ Скачивание {prog_name} в {self.installers_folder}")
                         urllib.request.urlretrieve(url, filename)
+                        downloaded_files.append(filename)
                         
                         status_label.config(text=f"Установка: {prog_name}")
+                        self.log(f"   🔧 Установка {prog_name}")
+                        
                         if filename.endswith('.msi'):
                             cmd = f'msiexec /i "{filename}" {silent_arg}'
                         else:
@@ -723,11 +811,29 @@ class ToolByYokus:
                         
                         if result.returncode == 0 or result.returncode == 3010:
                             installed.append(prog_name)
+                            self.log(f"   ✅ {prog_name} установлен")
                         else:
                             failed.append(prog_name)
+                            self.log(f"   ❌ Ошибка установки {prog_name} (код: {result.returncode})")
                             
                     except Exception as e:
                         failed.append(prog_name)
+                        self.log(f"   ❌ Ошибка: {prog_name} - {str(e)}")
+                
+                # Очищаем папку Installers (удаляем только содержимое, оставляя папку)
+                status_label.config(text="Удаление временных файлов...")
+                progress_win.update()
+                
+                if os.path.exists(self.installers_folder):
+                    for file in os.listdir(self.installers_folder):
+                        file_path = os.path.join(self.installers_folder, file)
+                        try:
+                            if os.path.isfile(file_path):
+                                os.remove(file_path)
+                                self.log(f"   🗑️ Удален установщик: {file}")
+                        except:
+                            pass
+                    self.log("   ✅ Папка Installers очищена")
                 
                 progress_bar['value'] = len(selected)
                 status_label.config(text="Установка завершена!")
@@ -794,34 +900,12 @@ class ToolByYokus:
             except:
                 return False
     
-    def flush_dns_cache(self):
-        try:
-            subprocess.run("ipconfig /flushdns", shell=True, capture_output=True)
-            return True
-        except:
-            return False
-    
     def clear_ram_cache(self):
         """Очистка RAM (оперативной памяти)"""
         try:
-            # Получаем текущее использование памяти
             memory_before = psutil.virtual_memory()
             used_before = memory_before.used
             
-            # Очищаем рабочий набор процессов
-            for proc in psutil.process_iter(['pid', 'name']):
-                try:
-                    proc.memory_info()
-                    # Запрашиваем очистку рабочего набора
-                    if hasattr(proc, 'memory_info') and proc.pid != os.getpid():
-                        pass
-                except:
-                    pass
-            
-            # Запускаем очистку через Windows API
-            ctypes.windll.psapi.EmptyWorkingSet(ctypes.windll.kernel32.GetCurrentProcess())
-            
-            # Принудительная сборка мусора
             import gc
             gc.collect()
             
@@ -1001,8 +1085,6 @@ class ToolByYokus:
                 total_items += 1
             if self.prefetch_var.get():
                 total_items += 1
-            if self.dns_var.get():
-                total_items += 1
             if self.ram_var.get():
                 total_items += 1
             if self.recycle_var.get():
@@ -1077,24 +1159,6 @@ class ToolByYokus:
                 else:
                     self.log("   ⚠️ Папка Prefetch не найдена")
             
-            if self.dns_var.get():
-                current_item += 1
-                self.progress_label.config(text="Очистка DNS кэша...")
-                self.progress_bar['value'] = (current_item / total_items) * 100
-                self.log("")
-                self.log("🌐 Очистка DNS кэша...")
-                
-                try:
-                    if self.flush_dns_cache():
-                        self.log("   ✅ DNS кэш очищен")
-                        deleted_files_total += 1
-                    else:
-                        self.log("   ⚠️ Не удалось очистить DNS кэш")
-                        all_failed_files.append(("DNS кэш", "Не удалось очистить"))
-                except Exception as e:
-                    self.log(f"   ❌ Ошибка при очистке DNS: {e}")
-                    all_failed_files.append(("DNS кэш", str(e)))
-            
             if self.ram_var.get():
                 current_item += 1
                 self.progress_label.config(text="Очистка RAM...")
@@ -1153,7 +1217,7 @@ class ToolByYokus:
                 f"Tool by Yokus завершил очистку!\n\n"
                 f"📁 Обработано элементов: {deleted_files_total:,}\n"
                 f"💾 Освобождено места: {self.format_size(freed_space_total)}\n"
-                f"📄 Журнал сохранен в папку YokusLogs"
+                f"📄 Журнал сохранен в папку: {self.logs_folder}"
             )
             
         except Exception as e:
@@ -1235,7 +1299,6 @@ class ToolByYokus:
             f.write("Журнал создан Tool by Yokus\n")
         
         self.log(f"\n📄 Журнал очистки сохранен: {log_filename}")
-        return log_path
 
 def main():
     root = tk.Tk()
